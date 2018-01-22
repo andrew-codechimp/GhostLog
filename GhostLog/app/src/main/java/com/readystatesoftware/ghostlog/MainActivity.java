@@ -32,11 +32,13 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.support.v4.content.LocalBroadcastManager;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -53,6 +55,7 @@ import java.util.List;
 public class MainActivity extends BasePreferenceActivity {
 
     private static final int CODE_TAG_FILTER = 1;
+    private static final int CODE_OVERLAY_PERMISSION = 2;
     private static Preference sTagFilterPref;
 
     private SharedPreferences mPrefs;
@@ -76,7 +79,21 @@ public class MainActivity extends BasePreferenceActivity {
                 Intent intent = new Intent(MainActivity.this, LogService.class);
                 if (b) {
                     if (!LogService.isRunning()) {
-                        startService(intent);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            if (!Settings.canDrawOverlays(MainActivity.this)) {
+                                Intent intentPermission = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:" + getPackageName()));
+                                /** request permission via start activity for result */
+                                startActivityForResult(intentPermission, CODE_OVERLAY_PERMISSION);
+                            }
+                            else {
+                                startService(intent);
+                            }
+                        }
+                        else {
+                            startService(intent);
+                        }
+
                     }
                 } else {
                     stopService(intent);
@@ -124,6 +141,17 @@ public class MainActivity extends BasePreferenceActivity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+        if (requestCode == CODE_OVERLAY_PERMISSION) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Settings.canDrawOverlays(this)) {
+                    // continue here - permission was granted
+                    Intent intent = new Intent(this, LogService.class);
+                    startService(intent);
+                }
+            }
+        }
+
         if (requestCode == CODE_TAG_FILTER) {
             if (resultCode == RESULT_OK) {
                 mPrefs.edit().putString(getString(R.string.pref_tag_filter), data.getAction()).apply();
@@ -204,11 +232,11 @@ public class MainActivity extends BasePreferenceActivity {
                     })
                     .create();
             dlg.show();
-            mPrefs.edit().putInt(getString(R.string.pref_root_fail_count), failCount+1).apply();
+            mPrefs.edit().putInt(getString(R.string.pref_root_fail_count), failCount + 1).apply();
         } else if (failCount <= 3) {
             // show toast 3 more times
             Toast.makeText(this, R.string.toast_no_root, Toast.LENGTH_LONG).show();
-            mPrefs.edit().putInt(getString(R.string.pref_root_fail_count), failCount+1).apply();
+            mPrefs.edit().putInt(getString(R.string.pref_root_fail_count), failCount + 1).apply();
         }
 
     }
